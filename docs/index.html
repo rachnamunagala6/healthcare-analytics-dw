@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Healthcare Analytics Dashboard</title>
+<meta name="description" content="Clinical, financial and operational insights from a PostgreSQL healthcare data warehouse built on synthetic patient data.">
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --muted:       #898781;
+    --grid:        #e1e0d9;
+    --axis:        #c3c2b7;
+    --border:      rgba(11,11,11,0.10);
+    --wash:        rgba(11,11,11,0.04);
+    --series-1:    #2a78d6;
+    --series-2:    #eb6834;
+    --series-1-wash: rgba(42,120,214,0.10);
+    --good:        #0ca30c;
+    --warning:     #fab219;
+    --critical:    #d03b3b;
+    --good-text:   #006300;
+    --tip-bg:      #0b0b0b;
+    --tip-ink:     #f0efec;
+    --banner-bg:   #fff4d6;
+    --banner-ink:  #5c4300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:      #0d0d0d;
+      --surface:   #1a1a19;
+      --ink:       #f0efec;
+      --ink-2:     #c3c2b7;
+      --muted:     #898781;
+      --grid:      #2c2c2a;
+      --axis:      #383835;
+      --border:    rgba(255,255,255,0.10);
+      --wash:      rgba(255,255,255,0.05);
+      --series-1:  #3987e5;
+      --series-2:  #d95926;
+      --series-1-wash: rgba(57,135,229,0.12);
+      --good-text: #0ca30c;
+      --tip-bg:    #f0efec;
+      --tip-ink:   #0b0b0b;
+      --banner-bg: #3a2e0a;
+      --banner-ink:#f5d98a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:      #0d0d0d;
+    --surface:   #1a1a19;
+    --ink:       #f0efec;
+    --ink-2:     #c3c2b7;
+    --muted:     #898781;
+    --grid:      #2c2c2a;
+    --axis:      #383835;
+    --border:    rgba(255,255,255,0.10);
+    --wash:      rgba(255,255,255,0.05);
+    --series-1:  #3987e5;
+    --series-2:  #d95926;
+    --series-1-wash: rgba(57,135,229,0.12);
+    --good-text: #0ca30c;
+    --tip-bg:    #f0efec;
+    --tip-ink:   #0b0b0b;
+    --banner-bg: #3a2e0a;
+    --banner-ink:#f5d98a;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+  @media (max-width: 640px) { .wrap { padding: 20px 16px 48px; } }
+
+  .banner {
+    background: var(--banner-bg); color: var(--banner-ink);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; font-size: 14px;
+  }
+
+  header.top { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;
+               justify-content: space-between; margin-bottom: 28px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-2); margin: 0; max-width: 720px; }
+  .top-actions { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink);
+    border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 14px;
+    text-decoration: none; cursor: pointer;
+  }
+  .btn:hover { background: var(--wash); }
+
+  nav.sections { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 24px;
+                 border-bottom: 1px solid var(--grid); }
+  nav.sections a {
+    color: var(--ink-2); text-decoration: none; padding: 8px 12px; font-size: 14px;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  nav.sections a:hover { color: var(--ink); }
+  nav.sections a.active { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+
+  section { scroll-margin-top: 16px; margin-bottom: 40px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em;
+       color: var(--muted); font-weight: 600; margin: 0 0 12px; }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+  .span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; }
+  .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; }
+  .span-8 { grid-column: span 8; } .span-12 { grid-column: span 12; }
+  @media (max-width: 900px) { .grid > * { grid-column: span 12; } }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px 14px; min-width: 0;
+  }
+  .card h3 { font-size: 16px; margin: 0 0 2px; font-weight: 600; }
+  .card .takeaway { color: var(--ink-2); font-size: 14px; margin: 0 0 14px; }
+  .chart { position: relative; width: 100%; }
+  .chart svg { display: block; width: 100%; overflow: visible; }
+
+  /* Hero + stat tiles */
+  .hero { display: flex; flex-direction: column; justify-content: center; }
+  .hero .label { color: var(--ink-2); font-size: 14px; }
+  .hero .value { font-size: 64px; font-weight: 650; line-height: 1.05; margin: 6px 0 8px; letter-spacing: -0.02em; }
+  .hero .note  { color: var(--ink-2); font-size: 14px; margin: 0; }
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  @media (max-width: 520px) { .tiles { grid-template-columns: 1fr; } }
+  .tile .label { color: var(--ink-2); font-size: 14px; }
+  .tile .value { font-size: 30px; font-weight: 650; line-height: 1.15; margin: 4px 0 2px; }
+  .tile .note  { color: var(--muted); font-size: 13px; }
+
+  .dataset { display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--ink-2); font-size: 14px; margin-top: 14px; }
+  .dataset b { color: var(--ink); font-weight: 600; }
+
+  /* Horizontal bars (HTML) */
+  .hbars { display: grid; grid-template-columns: minmax(110px, 36%) 1fr auto; gap: 8px 10px; align-items: center; }
+  .hbars .lab { font-size: 13px; color: var(--ink-2); line-height: 1.3; }
+  .hbars .track { display: flex; align-items: center; height: 26px; cursor: default; border-radius: 4px; }
+  .hbars .track:hover .bar, .hbars .track:focus .bar { filter: brightness(1.12); }
+  .hbars .track:focus { outline: 2px solid var(--series-1); outline-offset: 2px; }
+  .hbars .bar { height: 16px; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .hbars .val { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+
+  /* Heatmap */
+  .heat-scroll { overflow-x: auto; }
+  .heat { display: grid; gap: 2px; font-size: 13px; min-width: 500px; }
+  .heat .hd { color: var(--muted); font-size: 12px; text-align: center; padding: 0 2px 4px; line-height: 1.25; }
+  .heat .rl { color: var(--ink-2); display: flex; align-items: center; padding-right: 8px; white-space: nowrap; }
+  .heat .cell { height: 36px; display: flex; align-items: center; justify-content: center;
+                font-variant-numeric: tabular-nums; border-radius: 3px; cursor: default; }
+  .heat .cell:hover, .heat .cell:focus { outline: 2px solid var(--ink); outline-offset: -2px; }
+  .scale { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .scale .ramp { height: 8px; width: 140px; border-radius: 2px; }
+
+  /* Legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--ink-2); margin: -4px 0 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+
+  /* Tables */
+  details.data { margin-top: 10px; border-top: 1px solid var(--grid); padding-top: 8px; }
+  details.data summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  details.data summary:hover { color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-scroll { overflow-x: auto; }
+
+  .status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .status .ic { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center;
+                justify-content: center; font-size: 10px; font-weight: 700; color: #fff; }
+  .status.pass .ic { background: var(--good); }
+  .status.warn .ic { background: var(--warning); color: #0b0b0b; }
+  .status.err  .ic { background: var(--critical); }
+
+  /* Tooltip */
+  .tip {
+    position: fixed; z-index: 10; pointer-events: none; opacity: 0;
+    background: var(--tip-bg); color: var(--tip-ink); border-radius: 8px;
+    padding: 8px 10px; font-size: 13px; line-height: 1.4; max-width: 280px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18); transition: opacity 0.08s;
+  }
+  .tip.on { opacity: 1; }
+  .tip .t-title { opacity: 0.75; font-size: 12px; margin-bottom: 2px; }
+  .tip .t-row { display: flex; align-items: center; gap: 8px; }
+  .tip .t-row b { font-weight: 650; }
+  .tip .t-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+
+  footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--grid); padding-top: 16px; }
+  footer a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="banner" id="preview-banner" hidden>
+    Preview with sample data. Real project numbers replace this when the export is added.
+  </div>
+
+  <header class="top">
+    <div>
+      <h1>Healthcare Analytics Warehouse</h1>
+      <p class="sub" id="subtitle">Clinical, financial and operational insights from a PostgreSQL star schema built on synthetic patient records.</p>
+    </div>
+    <div class="top-actions">
+      <a class="btn" id="repo-link" href="https://github.com/rachnamunagala6/healthcare-analytics-dw">View the SQL on GitHub</a>
+      <button class="btn" id="theme-toggle" type="button" aria-label="Toggle dark mode">Dark mode</button>
+    </div>
+  </header>
+
+  <nav class="sections" aria-label="Sections">
+    <a href="#overview" class="active">Overview</a>
+    <a href="#clinical">Clinical</a>
+    <a href="#financial">Financial</a>
+    <a href="#operations">Operations</a>
+    <a href="#engineering">Data engineering</a>
+  </nav>
+
+  <!-- ============ OVERVIEW ============ -->
+  <section id="overview">
+    <h2>Overview</h2>
+    <div class="grid">
+      <div class="card hero span-5">
+        <div class="label">30-day readmission rate</div>
+        <div class="value" id="hero-value"></div>
+        <p class="note" id="hero-note"></p>
+      </div>
+      <div class="span-7 tiles" id="tiles"></div>
+    </div>
+    <div class="dataset" id="dataset"></div>
+  </section>
+
+  <!-- ============ CLINICAL ============ -->
+  <section id="clinical">
+    <h2>Clinical</h2>
+    <div class="grid">
+      <div class="card span-6">
+        <h3>Readmission rate by year</h3>
+        <p class="takeaway" id="t-readmit-year"></p>
+        <div class="chart" id="c-readmit-year"></div>
+        <details class="data"><summary>View data</summary><div class="table-scroll" id="d-readmit-year"></div></details>
+      </div>
+      <div class="card span-6">
+        <h3>Highest readmission rates by admission reason</h3>
+        <p class="takeaway" id="t-readmit-reason"></p>
+        <div class="chart" id="c-readmit-reason"></div>
+        <details class="data"><summary>View data</summary><div class="table-scroll" id="d-readmit-reason"></div></details>
+      </div>
+      <div class="card span-12">
+        <h3>Chronic disease prevalence by age</h3>
+        <p class="takeaway" id="t-prevalence"></p>
+        <div class="chart" id="c-prevalence"></div>
+        <details class="data"><summary>View data</summary><div class="table-scroll" id="d-prevalence"></div></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FINANCIAL ============ -->
+  <section id="financial">
+    <h2>Financial</h2>
+    <div class="grid">
+      <div class="card span-6">
+        <h3>How much more uninsured patients pay</h3>
+        <p class="takeaway" id="t-oop"></p>
+        <div class="chart" id="c-oop"></div>
+        <details class="data"><summary>View data</summary><div class="table-scroll" id="d-oop"></div></details>
+      </div>
+      <div class="card span-6">
+        <h3>Share of total cost by patient decile</h3>
+        <p class="takeaway" id="t-deciles"></p>
+        <div class="chart" id="c-deciles"></div>
+        <details class="data"><summary>View data</summary><div class="table-scroll" id="d-deciles"></div></details>
+      </div>
+      <div class="card span-12">
+        <h3>Total cost by payer</h3>
+        <p class="takeaway" id="t-payers"></p>
+        <div class="chart" id="c-payers"></div>
+        <details class="data"><summary>View data</summary><div class="table-scroll" id="d-payers"></div></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OPERATIONS ============ -->
+  <section id="operations">
+    <h2>Operations</h2>
+    <div class="grid">
+      <div class="card span-12">
+        <h3>Monthly visits</h3>
+        <p class="takeaway" id="t-monthly"></p>
+        <div class="chart" id="c-monthly"></div>
+        <details class="data"><summary>View data</summary><div class="table-scroll" id="d-monthly"></div></details>
+      </div>
+      <div class="card span-7">
+        <h3>Emergency visits and inpatient admissions per month</h3>
+        <p class="takeaway" id="t-acute"></p>
+        <div class="legend" id="l-acute"></div>
+        <div class="chart" id="c-acute"></div>
+      </div>
+      <div class="card span-5">
+        <h3>Visits by encounter type</h3>
+        <p class="takeaway" id="t-mix"></p>
+        <div class="chart" id="c-mix"></div>
+        <details class="data"><summary>View data</summary><div class="table-scroll" id="d-mix"></div></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ENGINEERING ============ -->
+  <section id="engineering">
+    <h2>Data engineering</h2>
+    <div class="grid">
+      <div class="card span-6">
+        <h3>Query speed-up from indexing</h3>
+        <p class="takeaway" id="t-perf"></p>
+        <div class="chart" id="c-perf"></div>
+        <details class="data"><summary>View data</summary><div class="table-scroll" id="d-perf"></div></details>
+      </div>
+      <div class="span-6 tiles" id="perf-tiles"></div>
+      <div class="card span-12">
+        <h3>Automated data quality checks</h3>
+        <p class="takeaway" id="t-dq"></p>
+        <div class="table-scroll" id="c-dq"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p id="footer-text"></p>
+  </footer>
+</div>
+
+<div class="tip" id="tip" role="tooltip"></div>
+
+<!-- =====================================================================
+     DASHBOARD DATA
+     Produced by analysis/11_dashboard_export.sql. To refresh the dashboard,
+     replace everything between the two script tags with the new export.
+     ===================================================================== -->
+<script id="dashboard-data" type="application/json">
+{"payers":[{"cost":54298470,"payer":"Medicare","visits":19853,"is_insured":true,"coverage_pct":80.9,"avg_patient_paid":522.51},{"cost":45888030,"payer":"Medicaid","visits":16459,"is_insured":true,"coverage_pct":97.9,"avg_patient_paid":57.65},{"cost":17964563,"payer":"Dual Eligible","visits":5325,"is_insured":true,"coverage_pct":99.1,"avg_patient_paid":31.17},{"cost":15585564,"payer":"NO_INSURANCE","visits":7316,"is_insured":false,"coverage_pct":0.0,"avg_patient_paid":2130.34},{"cost":14185239,"payer":"Humana","visits":5103,"is_insured":true,"coverage_pct":59.4,"avg_patient_paid":1129.01},{"cost":12635106,"payer":"Cigna Health","visits":4478,"is_insured":true,"coverage_pct":67.8,"avg_patient_paid":909.83},{"cost":12020279,"payer":"Aetna","visits":3866,"is_insured":true,"coverage_pct":60.8,"avg_patient_paid":1217.42},{"cost":10999812,"payer":"Anthem","visits":3841,"is_insured":true,"coverage_pct":79.2,"avg_patient_paid":596.06},{"cost":10295393,"payer":"Blue Cross Blue Shield","visits":3082,"is_insured":true,"coverage_pct":72.5,"avg_patient_paid":919.8},{"cost":7849288,"payer":"UnitedHealthcare","visits":3234,"is_insured":true,"coverage_pct":80.0,"avg_patient_paid":485.07}],"dataset":{"patients":1162,"diagnoses":41988,"encounters":72557,"medications":58725,"observations":909251},"monthly":[{"er":13,"cost":1080471.44,"month":"2023-10","visits":453,"inpatient":2,"uninsured_pct":5.3},{"er":15,"cost":1280556.99,"month":"2023-11","visits":440,"inpatient":2,"uninsured_pct":3.0},{"er":14,"cost":1014907.83,"month":"2023-12","visits":428,"inpatient":2,"uninsured_pct":4.9},{"er":15,"cost":1243628.03,"month":"2024-01","visits":436,"inpatient":7,"uninsured_pct":7.1},{"er":13,"cost":1236581.88,"month":"2024-02","visits":396,"inpatient":5,"uninsured_pct":4.0},{"er":12,"cost":1149223.62,"month":"2024-03","visits":419,"inpatient":2,"uninsured_pct":5.7},{"er":9,"cost":1033140.63,"month":"2024-04","visits":396,"inpatient":2,"uninsured_pct":6.6},{"er":17,"cost":1503935.71,"month":"2024-05","visits":418,"inpatient":8,"uninsured_pct":6.7},{"er":15,"cost":1091214.11,"month":"2024-06","visits":384,"inpatient":3,"uninsured_pct":3.4},{"er":12,"cost":967754.46,"month":"2024-07","visits":394,"inpatient":2,"uninsured_pct":3.8},{"er":18,"cost":1283957.24,"month":"2024-08","visits":444,"inpatient":5,"uninsured_pct":6.5},{"er":8,"cost":1299723.38,"month":"2024-09","visits":409,"inpatient":6,"uninsured_pct":6.6},{"er":15,"cost":1462342.69,"month":"2024-10","visits":488,"inpatient":8,"uninsured_pct":4.7},{"er":11,"cost":1172266.43,"month":"2024-11","visits":433,"inpatient":5,"uninsured_pct":6.0},{"er":17,"cost":1330885.41,"month":"2024-12","visits":435,"inpatient":4,"uninsured_pct":6.2},{"er":19,"cost":1171643.6,"month":"2025-01","visits":415,"inpatient":8,"uninsured_pct":5.3},{"er":22,"cost":1213578.3,"month":"2025-02","visits":390,"inpatient":6,"uninsured_pct":2.3},{"er":21,"cost":1354040.52,"month":"2025-03","visits":425,"inpatient":3,"uninsured_pct":5.2},{"er":18,"cost":1472549.53,"month":"2025-04","visits":442,"inpatient":5,"uninsured_pct":7.0},{"er":20,"cost":1082383.39,"month":"2025-05","visits":472,"inpatient":8,"uninsured_pct":6.4},{"er":14,"cost":1235272.27,"month":"2025-06","visits":390,"inpatient":3,"uninsured_pct":5.6},{"er":17,"cost":1213468.51,"month":"2025-07","visits":395,"inpatient":8,"uninsured_pct":6.1},{"er":17,"cost":1439937.72,"month":"2025-08","visits":418,"inpatient":8,"uninsured_pct":7.2},{"er":18,"cost":1207265.06,"month":"2025-09","visits":423,"inpatient":1,"uninsured_pct":8.5},{"er":17,"cost":1129438.44,"month":"2025-10","visits":404,"inpatient":5,"uninsured_pct":7.2},{"er":13,"cost":929765.72,"month":"2025-11","visits":417,"inpatient":2,"uninsured_pct":7.4},{"er":13,"cost":897536.67,"month":"2025-12","visits":379,"inpatient":5,"uninsured_pct":5.8},{"er":19,"cost":1177341.75,"month":"2026-01","visits":427,"inpatient":7,"uninsured_pct":8.2},{"er":14,"cost":1134508.12,"month":"2026-02","visits":361,"inpatient":12,"uninsured_pct":7.2},{"er":12,"cost":1069106.06,"month":"2026-03","visits":394,"inpatient":2,"uninsured_pct":4.1},{"er":9,"cost":1083549.6,"month":"2026-04","visits":411,"inpatient":6,"uninsured_pct":5.6},{"er":13,"cost":1134851.9,"month":"2026-05","visits":403,"inpatient":2,"uninsured_pct":6.5},{"er":16,"cost":1122542.05,"month":"2026-06","visits":390,"inpatient":1,"uninsured_pct":6.4},{"er":9,"cost":1042965.97,"month":"2026-07","visits":378,"inpatient":2,"uninsured_pct":4.8},{"er":24,"cost":1244390.39,"month":"2026-08","visits":409,"inpatient":6,"uninsured_pct":4.4},{"er":11,"cost":1168317.36,"month":"2026-09","visits":448,"inpatient":5,"uninsured_pct":6.9}],"headline":{"dq_checks":18,"dq_issues":443,"readmission_cost":7802450,"uninsured_oop_ratio":4.2,"readmission_cost_pct":25.0,"readmission_rate_pct":12.3,"pct_patients_half_cost":12.2},"prevalence":[{"asthma":4.2,"obesity":0.0,"age_band":"0-17","diabetes":0.0,"patients":239,"hypertension":0.0,"high_cholesterol":0.0},{"asthma":8.9,"obesity":11.6,"age_band":"18-34","diabetes":0.0,"patients":225,"hypertension":2.7,"high_cholesterol":0.0},{"asthma":6.8,"obesity":58.8,"age_band":"35-49","diabetes":13.0,"patients":177,"hypertension":22.6,"high_cholesterol":2.3},{"asthma":4.1,"obesity":84.5,"age_band":"50-64","diabetes":20.1,"patients":194,"hypertension":37.6,"high_cholesterol":17.5},{"asthma":2.4,"obesity":84.2,"age_band":"65+","diabetes":43.0,"patients":165,"hypertension":44.2,"high_cholesterol":37.0}],"performance":[{"query":"a1c_history_all_patients","purpose":"Every A1C lab result in time order per patient (diabetes analysis)","after_ms":1.56,"before_ms":34.88},{"query":"flu_vaccine_gap","purpose":"Living patients with no flu vaccine in the last 12 months (anti-join)","after_ms":5.86,"before_ms":9.04},{"query":"patient_diagnoses","purpose":"Diagnosis and medication lists for a set of patients","after_ms":5.44,"before_ms":13.35},{"query":"patient_timeline","purpose":"All visits for one patient, newest first (a patient chart screen)","after_ms":11.3,"before_ms":10.29},{"query":"readmission_window","purpose":"Inpatient stays with the next admission per patient (readmissions)","after_ms":0.48,"before_ms":6.56},{"query":"recent_visits_last_90_days","purpose":"Visits in the last 90 days (an operations dashboard filter)","after_ms":6.13,"before_ms":31.58}],"readmission":{"by_year":[{"year":2016,"rate_pct":0.0,"admissions":16},{"year":2017,"rate_pct":12.3,"admissions":57},{"year":2018,"rate_pct":27.6,"admissions":58},{"year":2019,"rate_pct":31.7,"admissions":63},{"year":2020,"rate_pct":15.7,"admissions":70},{"year":2021,"rate_pct":6.3,"admissions":63},{"year":2022,"rate_pct":2.4,"admissions":42},{"year":2023,"rate_pct":8.3,"admissions":48},{"year":2024,"rate_pct":1.8,"admissions":57},{"year":2025,"rate_pct":4.8,"admissions":62},{"year":2026,"rate_pct":15.8,"admissions":38}],"rate_pct":12.3,"by_reason":[{"reason":"Primary small cell malignant neoplasm of lung  TNM stage 1 (disorder)","rate_pct":91.2,"admissions":57},{"reason":"Non-small cell carcinoma of lung  TNM stage 1 (disorder)","rate_pct":22.7,"admissions":256},{"reason":"Aortic valve stenosis (disorder)","rate_pct":20.0,"admissions":10},{"reason":"Disease caused by severe acute respiratory syndrome coronavirus 2 (disorder)","rate_pct":14.3,"admissions":21},{"reason":"Chronic congestive heart failure (disorder)","rate_pct":5.4,"admissions":56},{"reason":"Acute ST segment elevation myocardial infarction (disorder)","rate_pct":3.8,"admissions":26},{"reason":"Dependent drug abuse (disorder)","rate_pct":2.6,"admissions":195},{"reason":"Sleep disorder (disorder)","rate_pct":0.0,"admissions":47}]},"cost_deciles":[{"decile":1,"patients":117,"pct_of_cost":44.9},{"decile":2,"patients":117,"pct_of_cost":19.5},{"decile":3,"patients":116,"pct_of_cost":11.6},{"decile":4,"patients":116,"pct_of_cost":7.8},{"decile":5,"patients":116,"pct_of_cost":5.4},{"decile":6,"patients":116,"pct_of_cost":3.9},{"decile":7,"patients":116,"pct_of_cost":2.8},{"decile":8,"patients":116,"pct_of_cost":2.0},{"decile":9,"patients":116,"pct_of_cost":1.4},{"decile":10,"patients":116,"pct_of_cost":0.7}],"data_quality":[{"tbl":"observations","check":"observation_after_death","issues":218,"status":"ERROR","category":"Consistency","severity":"ERROR","rows_tested":909251},{"tbl":"encounters","check":"encounter_after_death","issues":150,"status":"ERROR","category":"Consistency","severity":"ERROR","rows_tested":72557},{"tbl":"medications","check":"medication_stop_before_start","issues":69,"status":"ERROR","category":"Consistency","severity":"ERROR","rows_tested":58725},{"tbl":"encounters","check":"encounter_duplicate","issues":4,"status":"WARNING","category":"Uniqueness","severity":"WARNING","rows_tested":72557},{"tbl":"observations","check":"observation_systolic_bp_range","issues":2,"status":"WARNING","category":"Plausibility","severity":"WARNING","rows_tested":909251},{"tbl":"conditions","check":"condition_duplicate","issues":0,"status":"PASS","category":"Uniqueness","severity":"WARNING","rows_tested":41988},{"tbl":"conditions","check":"condition_stop_before_start","issues":0,"status":"PASS","category":"Consistency","severity":"ERROR","rows_tested":41988},{"tbl":"encounters","check":"encounter_coverage_exceeds_cost","issues":0,"status":"PASS","category":"Consistency","severity":"ERROR","rows_tested":72557},{"tbl":"encounters","check":"encounter_long_stay","issues":0,"status":"PASS","category":"Plausibility","severity":"WARNING","rows_tested":72557},{"tbl":"encounters","check":"encounter_missing_payer","issues":0,"status":"PASS","category":"Completeness","severity":"WARNING","rows_tested":72557},{"tbl":"encounters","check":"encounter_missing_provider","issues":0,"status":"PASS","category":"Completeness","severity":"WARNING","rows_tested":72557},{"tbl":"encounters","check":"encounter_stop_before_start","issues":0,"status":"PASS","category":"Consistency","severity":"ERROR","rows_tested":72557},{"tbl":"observations","check":"observation_bmi_range","issues":0,"status":"PASS","category":"Plausibility","severity":"WARNING","rows_tested":909251},{"tbl":"observations","check":"observation_heart_rate_range","issues":0,"status":"PASS","category":"Plausibility","severity":"WARNING","rows_tested":909251},{"tbl":"observations","check":"observation_numeric_unparsed","issues":0,"status":"PASS","category":"Validity","severity":"ERROR","rows_tested":909251},{"tbl":"patients","check":"patient_birth_in_future","issues":0,"status":"PASS","category":"Validity","severity":"ERROR","rows_tested":1162},{"tbl":"patients","check":"patient_death_before_birth","issues":0,"status":"PASS","category":"Consistency","severity":"ERROR","rows_tested":1162},{"tbl":"patients","check":"patient_no_encounters","issues":0,"status":"PASS","category":"Completeness","severity":"WARNING","rows_tested":1162}],"data_through":"2026-10-07","generated_at":"2026-10-20","encounter_mix":[{"cost":122980898,"type":"ambulatory","visits":42131,"median_hours":2.1},{"cost":17658353,"type":"wellness","visits":14332,"median_hours":0.6},{"cost":12134182,"type":"outpatient","visits":8663,"median_hours":0.3},{"cost":3137106,"type":"urgentcare","visits":2967,"median_hours":0.7},{"cost":9078800,"type":"emergency","visits":2459,"median_hours":1.0},{"cost":31172691,"type":"inpatient","visits":1115,"median_hours":79.1},{"cost":291949,"type":"home","visits":417,"median_hours":0.3},{"cost":3083200,"type":"snf","visits":175,"median_hours":384.3},{"cost":2104008,"type":"hospice","visits":173,"median_hours":552.9},{"cost":80558,"type":"virtual","visits":125,"median_hours":0.3}],"out_of_pocket":[{"type":"inpatient","insured":3300.55,"uninsured":17224.9},{"type":"hospice","insured":1885.45,"uninsured":11612.39},{"type":"snf","insured":3337.02,"uninsured":9829.84},{"type":"emergency","insured":586.6,"uninsured":4131.62},{"type":"ambulatory","insured":451.43,"uninsured":2348.26},{"type":"outpatient","insured":394.13,"uninsured":1497.21},{"type":"wellness","insured":506.56,"uninsured":1038.08},{"type":"urgentcare","insured":186.76,"uninsured":941.12},{"type":"virtual","insured":199.18,"uninsured":595.82},{"type":"home","insured":121.52,"uninsured":null}],"performance_extra":{"monthly_kpis__live":74.41,"last_year_bp__partitioned":0.44,"monthly_kpis__materialized":0.14,"last_year_bp__unpartitioned":0.66}}
+</script>
+
+<script>
+(() => {
+  "use strict";
+  const D = JSON.parse(document.getElementById("dashboard-data").textContent);
+  const SVG = "http://www.w3.org/2000/svg";
+
+  if (D.preview) document.getElementById("preview-banner").hidden = false;
+
+  /* ---------- formatting ---------- */
+  const nf = new Intl.NumberFormat("en-US");
+  const int = n => nf.format(Math.round(n));
+  const pct = (n, d = 1) => `${Number(n).toFixed(d)}%`;
+  const compact = n => {
+    const a = Math.abs(n);
+    if (a >= 1e9) return (n / 1e9).toFixed(a >= 1e10 ? 0 : 1).replace(/\.0$/, "") + "B";
+    if (a >= 1e6) return (n / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
+    if (a >= 1e3) return (n / 1e3).toFixed(a >= 1e4 ? 0 : 1).replace(/\.0$/, "") + "K";
+    return String(Math.round(n));
+  };
+  const money = n => "$" + compact(n);
+  const moneyFull = n => "$" + int(n);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const monthLabel = ym => { const [y, m] = ym.split("-"); return `${months[+m - 1]} ${y}`; };
+  const cleanCond = s => String(s)
+      .replace(/\s*\((disorder|finding|situation|procedure)\)\s*$/i, "")
+      .replace(/\s{2,}/g, " ").trim();
+  const titleCase = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const typeName = t => ({ ambulatory: "Ambulatory", wellness: "Wellness", outpatient: "Outpatient",
+      emergency: "Emergency", inpatient: "Inpatient", urgentcare: "Urgent care", home: "Home",
+      hospice: "Hospice", snf: "Skilled nursing", virtual: "Virtual" }[t] || titleCase(t));
+
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  /* ---------- DOM helpers (labels go in via textContent) ---------- */
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const sv = (tag, attrs = {}, parent) => {
+    const e = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const setText = (id, text) => { document.getElementById(id).textContent = text; };
+
+  /* ---------- tooltip ---------- */
+  const tip = document.getElementById("tip");
+  function showTip(evt, title, rows) {
+    tip.replaceChildren();
+    if (title) tip.appendChild(el("div", "t-title", title));
+    for (const r of rows) {
+      const row = el("div", "t-row");
+      if (r.color) { const k = el("span", "t-key"); k.style.background = r.color; row.appendChild(k); }
+      row.appendChild(el("b", null, r.value));
+      if (r.label) row.appendChild(el("span", null, r.label));
+      tip.appendChild(row);
+    }
+    tip.classList.add("on");
+    moveTip(evt);
+  }
+  function moveTip(evt) {
+    let x, y;
+    if (evt && evt.clientX !== undefined && evt.type !== "focus") { x = evt.clientX; y = evt.clientY; }
+    else { const r = evt.target.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top; }
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let left = x + 14, top = y - h - 12;
+    if (left + w > window.innerWidth - 8) left = x - w - 14;
+    if (top < 8) top = y + 16;
+    tip.style.left = Math.max(8, left) + "px";
+    tip.style.top = top + "px";
+  }
+  const hideTip = () => tip.classList.remove("on");
+  function hoverable(node, getTip) {
+    node.setAttribute("tabindex", "0");
+    node.addEventListener("pointermove", e => { const t = getTip(); showTip(e, t.title, t.rows); });
+    node.addEventListener("pointerleave", hideTip);
+    node.addEventListener("focus", e => { const t = getTip(); showTip(e, t.title, t.rows); });
+    node.addEventListener("blur", hideTip);
+  }
+
+  /* ---------- table view ---------- */
+  function table(id, headers, rows, numeric = []) {
+    const t = el("table");
+    const tr = el("tr");
+    headers.forEach((h, i) => { const th = el("th", numeric.includes(i) ? "num" : null, h); tr.appendChild(th); });
+    const thead = el("thead"); thead.appendChild(tr); t.appendChild(thead);
+    const tb = el("tbody");
+    for (const r of rows) {
+      const row = el("tr");
+      r.forEach((c, i) => row.appendChild(el("td", numeric.includes(i) ? "num" : null, c)));
+      tb.appendChild(row);
+    }
+    t.appendChild(tb);
+    document.getElementById(id).replaceChildren(t);
+  }
+
+  /* ---------- scales ---------- */
+  function niceTicks(max, count = 4) {
+    if (!(max > 0)) return [0, 1];
+    const raw = max / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+    const ticks = [];
+    for (let v = 0; v <= max + step * 0.001; v += step) ticks.push(+v.toFixed(10));
+    if (ticks[ticks.length - 1] < max) ticks.push(+(ticks[ticks.length - 1] + step).toFixed(10));
+    return ticks;
+  }
+
+  /* ---------- horizontal bars (HTML) ---------- */
+  function hbars(id, items, opts) {
+    const host = document.getElementById(id);
+    const max = Math.max(...items.map(d => d.value)) || 1;
+    const g = el("div", "hbars");
+    for (const d of items) {
+      g.appendChild(el("div", "lab", d.label));
+      // bar length is a true proportion of the track; the value has its own column
+      const track = el("div", "track");
+      const bar = el("div", "bar");
+      bar.style.width = `${(d.value / max) * 100}%`;
+      track.appendChild(bar);
+      track.setAttribute("aria-label", `${d.label}: ${opts.fmt(d.value)}`);
+      hoverable(track, () => ({ title: d.label, rows: d.tip }));
+      g.appendChild(track);
+      g.appendChild(el("div", "val", opts.fmt(d.value)));
+    }
+    host.replaceChildren(g);
+  }
+
+  /* ---------- column chart (SVG) ---------- */
+  function columns(id, items, opts) {
+    const host = document.getElementById(id);
+    const W = Math.max(280, host.clientWidth), H = opts.height || 220;
+    const m = { t: 22, r: 8, b: 26, l: 40 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const ticks = niceTicks(Math.max(...items.map(d => d.value)), 4);
+    const top = ticks[ticks.length - 1];
+    const y = v => m.t + ih - (v / top) * ih;
+    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": opts.aria });
+    for (const t of ticks) {
+      sv("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: t === 0 ? css("--axis") : css("--grid"), "stroke-width": 1 }, svg);
+      const tx = sv("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end", "font-size": 11, fill: css("--muted") }, svg);
+      tx.textContent = opts.tick(t);
+    }
+    const band = iw / items.length, bw = Math.min(24, band * 0.62);
+    const labelEvery = Math.ceil(items.length / Math.max(1, Math.floor(iw / 44)));
+    items.forEach((d, i) => {
+      const cx = m.l + band * i + band / 2, x0 = cx - bw / 2, y0 = y(d.value), yb = y(0);
+      const h = Math.max(0, yb - y0), r = Math.min(4, h);
+      const path = h > 0
+        ? `M${x0},${yb} V${y0 + r} Q${x0},${y0} ${x0 + r},${y0} H${x0 + bw - r} Q${x0 + bw},${y0} ${x0 + bw},${y0 + r} V${yb} Z`
+        : `M${x0},${yb} H${x0 + bw}`;
+      const g = sv("g", { class: "col" }, svg);
+      sv("rect", { x: m.l + band * i, y: m.t, width: band, height: ih, fill: "transparent" }, g);
+      const bar = sv("path", { d: path, fill: d.color || css("--series-1") }, g);
+      g.addEventListener("pointerenter", () => bar.setAttribute("opacity", 0.8));
+      g.addEventListener("pointerleave", () => bar.setAttribute("opacity", 1));
+      hoverable(g, () => ({ title: d.label, rows: d.tip }));
+      if (i % labelEvery === 0 || i === items.length - 1) {
+        const lt = sv("text", { x: cx, y: H - 8, "text-anchor": "middle", "font-size": 11, fill: css("--muted") }, svg);
+        lt.textContent = d.short || d.label;
+      }
+      if (d.showValue) {
+        const vt = sv("text", { x: cx, y: y0 - 6, "text-anchor": "middle", "font-size": 12, "font-weight": 600, fill: css("--ink") }, svg);
+        vt.textContent = opts.fmt(d.value);
+      }
+    });
+    host.replaceChildren(svg);
+  }
+
+  /* ---------- line chart (SVG, crosshair + one tooltip for every series) ---------- */
+  function lines(id, labels, series, opts) {
+    const host = document.getElementById(id);
+    const W = Math.max(280, host.clientWidth), H = opts.height || 240;
+    const m = { t: 14, r: opts.endLabels ? 96 : 12, b: 26, l: 44 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const ticks = niceTicks(Math.max(...series.flatMap(s => s.values)), 4);
+    const top = ticks[ticks.length - 1];
+    const n = labels.length;
+    const x = i => m.l + (n === 1 ? iw / 2 : (i / (n - 1)) * iw);
+    const y = v => m.t + ih - (v / top) * ih;
+    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": opts.aria });
+    for (const t of ticks) {
+      sv("line", { x1: m.l, x2: m.l + iw, y1: y(t), y2: y(t), stroke: t === 0 ? css("--axis") : css("--grid"), "stroke-width": 1 }, svg);
+      const tx = sv("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end", "font-size": 11, fill: css("--muted") }, svg);
+      tx.textContent = opts.tick(t);
+    }
+    const step = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(iw / 70))));
+    labels.forEach((l, i) => {
+      if (i % step !== 0) return;
+      const tx = sv("text", { x: x(i), y: H - 8, "text-anchor": "middle", "font-size": 11, fill: css("--muted") }, svg);
+      tx.textContent = opts.xShort(l);
+    });
+    for (const s of series) {
+      const d = s.values.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join(" ");
+      if (s.area) sv("path", { d: `${d} L${x(n - 1)},${y(0)} L${x(0)},${y(0)} Z`, fill: css("--series-1-wash") }, svg);
+      sv("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+      const lx = x(n - 1), ly = y(s.values[n - 1]);
+      sv("circle", { cx: lx, cy: ly, r: 4, fill: s.color, stroke: css("--surface"), "stroke-width": 2 }, svg);
+      if (opts.endLabels) {
+        const t = sv("text", { x: lx + 10, y: ly + 4 + (s.nudge || 0), "font-size": 12, fill: css("--ink-2") }, svg);
+        t.textContent = `${s.name} ${opts.fmt(s.values[n - 1])}`;
+      }
+    }
+    const cross = sv("line", { y1: m.t, y2: m.t + ih, stroke: css("--axis"), "stroke-width": 1, opacity: 0 }, svg);
+    const dots = series.map(s => sv("circle", { r: 4, fill: s.color, stroke: css("--surface"), "stroke-width": 2, opacity: 0 }, svg));
+    const overlay = sv("rect", { x: m.l, y: m.t, width: iw, height: ih, fill: "transparent", tabindex: 0 }, svg);
+    let idx = n - 1;
+    const update = (i, evt) => {
+      idx = Math.max(0, Math.min(n - 1, i));
+      cross.setAttribute("x1", x(idx)); cross.setAttribute("x2", x(idx)); cross.setAttribute("opacity", 1);
+      dots.forEach((dt, k) => { dt.setAttribute("cx", x(idx)); dt.setAttribute("cy", y(series[k].values[idx])); dt.setAttribute("opacity", 1); });
+      showTip(evt, opts.xLong(labels[idx]),
+        series.map(s => ({ color: s.color, value: opts.fmt(s.values[idx]), label: series.length > 1 ? s.name : "" })));
+    };
+    const clear = () => { cross.setAttribute("opacity", 0); dots.forEach(d => d.setAttribute("opacity", 0)); hideTip(); };
+    overlay.addEventListener("pointermove", e => {
+      const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * (W / r.width);
+      update(Math.round(((px - m.l) / iw) * (n - 1)), e);
+    });
+    overlay.addEventListener("pointerleave", clear);
+    overlay.addEventListener("focus", e => update(idx, e));
+    overlay.addEventListener("blur", clear);
+    overlay.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        const r = overlay.getBoundingClientRect();
+        update(idx + (e.key === "ArrowRight" ? 1 : -1), { clientX: r.left + ((x(idx) - m.l) / iw) * r.width, clientY: r.top + 20, type: "key" });
+      }
+    });
+    host.replaceChildren(svg);
+  }
+
+  /* ---------- heatmap (HTML grid, sequential blue) ---------- */
+  const BLUES = ["#cde2fb","#b7d3f6","#9ec5f4","#86b6ef","#6da7ec","#5598e7","#3987e5","#2a78d6","#256abf","#1c5cab","#184f95","#104281","#0d366b"];
+  function heatmap(id, rowLabels, colLabels, values, opts) {
+    const host = document.getElementById(id);
+    const max = Math.max(...values.flat(), 1);
+    const g = el("div", "heat");
+    g.style.gridTemplateColumns = `auto repeat(${colLabels.length}, minmax(56px, 1fr))`;
+    g.appendChild(el("div", "hd", ""));
+    colLabels.forEach(c => g.appendChild(el("div", "hd", c)));
+    rowLabels.forEach((rl, i) => {
+      g.appendChild(el("div", "rl", rl));
+      colLabels.forEach((cl, j) => {
+        const v = values[i][j];
+        const step = Math.min(BLUES.length - 1, Math.round((v / max) * (BLUES.length - 1)));
+        const cell = el("div", "cell", opts.fmt(v));
+        cell.style.background = BLUES[step];
+        cell.style.color = step >= 6 ? "#ffffff" : "#0b0b0b";
+        cell.setAttribute("aria-label", `${rl}, ${cl}: ${opts.fmt(v)}`);
+        hoverable(cell, () => ({ title: `${cl}, ages ${rl}`, rows: [{ value: opts.fmt(v), label: "of living patients" }] }));
+        g.appendChild(cell);
+      });
+    });
+    const scale = el("div", "scale");
+    scale.appendChild(el("span", null, "0%"));
+    const ramp = el("span", "ramp");
+    ramp.style.background = `linear-gradient(90deg, ${BLUES[0]}, ${BLUES[BLUES.length - 1]})`;
+    scale.appendChild(ramp);
+    scale.appendChild(el("span", null, opts.fmt(max)));
+    const scroller = el("div", "heat-scroll");
+    scroller.appendChild(g);
+    host.replaceChildren(scroller, scale);
+  }
+
+  /* ---------- tiles ---------- */
+  function tiles(id, list) {
+    const host = document.getElementById(id);
+    host.replaceChildren(...list.map(t => {
+      const c = el("div", "card tile");
+      c.appendChild(el("div", "label", t.label));
+      c.appendChild(el("div", "value", t.value));
+      c.appendChild(el("div", "note", t.note));
+      return c;
+    }));
+  }
+
+  /* =====================================================================
+     RENDER
+     ===================================================================== */
+  function render() {
+    const H = D.headline, S = D.dataset;
+
+    /* header */
+    setText("subtitle",
+      `Clinical, financial and operational insights from a PostgreSQL star schema, built on synthetic records for ${int(S.patients)} patients (data through ${new Date(D.data_through + "T00:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}).`);
+
+    /* overview */
+    setText("hero-value", pct(H.readmission_rate_pct));
+    setText("hero-note", "of inpatient stays were followed by another admission within 30 days.");
+    tiles("tiles", [
+      { label: "Readmissions' share of inpatient cost", value: pct(H.readmission_cost_pct),
+        note: `${money(H.readmission_cost)} spent on readmission stays` },
+      { label: "Uninsured out-of-pocket cost", value: `${Number(H.uninsured_oop_ratio).toFixed(1)}×`,
+        note: "what insured patients pay per visit" },
+      { label: "Patients driving half of all cost", value: pct(H.pct_patients_half_cost),
+        note: "of patients account for 50% of spending" },
+      { label: "Data quality issues flagged", value: int(H.dq_issues),
+        note: `by ${H.dq_checks} automated checks` },
+    ]);
+    const ds = document.getElementById("dataset");
+    ds.replaceChildren();
+    [["patients", S.patients], ["encounters", S.encounters], ["lab results and vitals", S.observations],
+     ["diagnoses", S.diagnoses], ["prescriptions", S.medications]].forEach(([k, v]) => {
+      const s = el("span"); s.appendChild(el("b", null, int(v))); s.appendChild(document.createTextNode(" " + k)); ds.appendChild(s);
+    });
+
+    /* clinical: readmissions by year */
+    // The export covers a rolling 10-year window, so its first year is only
+    // partly covered: drop it. The current year is labelled year-to-date.
+    const thruYear = +String(D.data_through).slice(0, 4);
+    let ry = (D.readmission.by_year || []).slice();
+    if (ry.length > 1 && ry[0].year <= thruYear - 10) ry = ry.slice(1);
+    const yLabel = d => d.year === thruYear ? `${d.year} YTD` : String(d.year);
+    if (ry.length) {
+      const maxR = ry.reduce((a, b) => (b.rate_pct > a.rate_pct ? b : a));
+      const minR = ry.reduce((a, b) => (b.rate_pct < a.rate_pct ? b : a));
+      columns("c-readmit-year", ry.map((d, i) => ({
+        label: yLabel(d), short: String(d.year), value: +d.rate_pct,
+        showValue: i === ry.length - 1 || d === maxR,
+        tip: [{ value: pct(d.rate_pct), label: "readmitted" }, { value: int(d.admissions), label: "inpatient stays" }],
+      })), { fmt: v => pct(v), tick: v => v + "%", aria: "Readmission rate by year" });
+      setText("t-readmit-year", `Peaked at ${pct(maxR.rate_pct)} in ${maxR.year} and fell as low as ${pct(minR.rate_pct)} in ${minR.year}. With about ${int(ry.reduce((a, d) => a + d.admissions, 0) / ry.length)} stays a year, a few patients move the rate a lot.`);
+      table("d-readmit-year", ["Year", "Inpatient stays", "Readmitted"], ry.map(d => [yLabel(d), int(d.admissions), pct(d.rate_pct)]), [1, 2]);
+    }
+
+    /* clinical: readmissions by reason */
+    const rr = (D.readmission.by_reason || []);
+    if (rr.length) {
+      hbars("c-readmit-reason", rr.map(d => ({
+        label: cleanCond(d.reason), value: +d.rate_pct,
+        tip: [{ value: pct(d.rate_pct), label: "readmitted within 30 days" }, { value: int(d.admissions), label: "inpatient stays" }],
+      })), { fmt: v => pct(v), reserve: 52 });
+      const top = rr[0];
+      const isCancer = /neoplasm|carcinoma|cancer|malignan/i.test(top.reason);
+      setText("t-readmit-reason", `Reasons with at least 10 stays. ${cleanCond(top.reason)} leads at ${pct(top.rate_pct)}` +
+        (isCancer ? ", likely planned treatment cycles rather than unplanned returns." : "."));
+      table("d-readmit-reason", ["Admission reason", "Stays", "Readmitted"], rr.map(d => [cleanCond(d.reason), int(d.admissions), pct(d.rate_pct)]), [1, 2]);
+    } else {
+      setText("t-readmit-reason", "No admission reason had at least 10 stays.");
+    }
+
+    /* clinical: prevalence heatmap */
+    const pv = D.prevalence || [];
+    const conds = [["diabetes", "Diabetes"], ["hypertension", "Hypertension"], ["high_cholesterol", "High cholesterol"], ["obesity", "Obesity"], ["asthma", "Asthma"]];
+    heatmap("c-prevalence", pv.map(r => r.age_band), conds.map(c => c[1]),
+      pv.map(r => conds.map(c => +r[c[0]])), { fmt: v => pct(v, 0) });
+    const oldest = pv[pv.length - 1], youngest = pv[0];
+    if (oldest && youngest) {
+      setText("t-prevalence", `Share of living patients with each condition. Hypertension rises from ${pct(youngest.hypertension, 0)} at ages ${youngest.age_band} to ${pct(oldest.hypertension, 0)} at ${oldest.age_band}.`);
+    }
+    table("d-prevalence", ["Age band", "Patients", ...conds.map(c => c[1])],
+      pv.map(r => [r.age_band, int(r.patients), ...conds.map(c => pct(r[c[0]]))]), [1, 2, 3, 4, 5, 6]);
+
+    /* financial: out-of-pocket ratio */
+    const oop = (D.out_of_pocket || []).filter(d => d.insured > 0 && d.uninsured != null);
+    const oopRows = oop.map(d => ({ ...d, ratio: d.uninsured / d.insured })).sort((a, b) => b.ratio - a.ratio);
+    hbars("c-oop", oopRows.map(d => ({
+      label: typeName(d.type), value: d.ratio,
+      tip: [{ value: `${d.ratio.toFixed(1)}×`, label: "more for uninsured" },
+            { value: moneyFull(d.uninsured), label: "uninsured, per visit" },
+            { value: moneyFull(d.insured), label: "insured, per visit" }],
+    })), { fmt: v => `${v.toFixed(1)}×`, reserve: 44 });
+    const inp = oop.find(d => d.type === "inpatient");
+    setText("t-oop", inp
+      ? `Out-of-pocket cost per visit, uninsured vs insured. For a hospital stay: ${moneyFull(inp.uninsured)} vs ${moneyFull(inp.insured)}.`
+      : `Out-of-pocket cost per visit, uninsured vs insured: ${Number(H.uninsured_oop_ratio).toFixed(1)}× overall.`);
+    table("d-oop", ["Visit type", "Insured (avg)", "Uninsured (avg)", "Ratio"],
+      oopRows.map(d => [typeName(d.type), moneyFull(d.insured), moneyFull(d.uninsured), d.ratio.toFixed(1) + "×"]), [1, 2, 3]);
+
+    /* financial: cost deciles */
+    const dec = D.cost_deciles || [];
+    columns("c-deciles", dec.map(d => ({
+      label: d.decile === 1 ? "Top 10% of patients" : `Decile ${d.decile}`,
+      short: d.decile === 1 ? "Top 10%" : String(d.decile),
+      value: +d.pct_of_cost, showValue: d.decile === 1 || d.decile === 10,
+      tip: [{ value: pct(d.pct_of_cost), label: "of total cost" }, { value: int(d.patients), label: "patients" }],
+    })), { fmt: v => pct(v), tick: v => v + "%", aria: "Share of total cost by patient decile" });
+    if (dec.length) setText("t-deciles", `Patients ranked by lifetime cost. The costliest 10% account for ${pct(dec[0].pct_of_cost)} of spending; the cheapest 10%, ${pct(dec[dec.length - 1].pct_of_cost)}.`);
+    table("d-deciles", ["Decile (1 = costliest)", "Patients", "Share of cost"], dec.map(d => [d.decile, int(d.patients), pct(d.pct_of_cost)]), [1, 2]);
+
+    /* financial: payers */
+    const py = D.payers || [];
+    hbars("c-payers", py.map(d => ({
+      label: d.payer === "NO_INSURANCE" ? "No insurance" : d.payer, value: +d.cost,
+      tip: [{ value: moneyFull(d.cost), label: "total cost" }, { value: int(d.visits), label: "visits" },
+            { value: pct(d.coverage_pct), label: "covered by payer" }],
+    })), { fmt: money, reserve: 48 });
+    const unins = py.find(d => !d.is_insured);
+    const totalCost = py.reduce((a, d) => a + +d.cost, 0);
+    setText("t-payers", unins
+      ? `${pct(100 * unins.cost / totalCost)} of all visit costs had no insurer to pay them.`
+      : "Visit costs by insurer.");
+    table("d-payers", ["Payer", "Visits", "Total cost", "Covered by payer", "Avg paid by patient"],
+      py.map(d => [d.payer === "NO_INSURANCE" ? "No insurance" : d.payer, int(d.visits), moneyFull(d.cost), pct(d.coverage_pct), moneyFull(d.avg_patient_paid)]), [1, 2, 3, 4]);
+
+    /* operations: monthly visits */
+    const mo = D.monthly || [];
+    if (mo.length) {
+      lines("c-monthly", mo.map(d => d.month),
+        [{ name: "Visits", color: css("--series-1"), values: mo.map(d => +d.visits), area: true }],
+        { fmt: v => int(v), tick: compact, xShort: l => { const [y, m] = l.split("-"); return m === "01" ? y : `${months[+m - 1]} ’${y.slice(2)}`; },
+          xLong: monthLabel, aria: "Visits per month" });
+      const avg = mo.reduce((a, d) => a + d.visits, 0) / mo.length;
+      const peak = mo.reduce((a, b) => (b.visits > a.visits ? b : a));
+      setText("t-monthly", `Last ${mo.length} full months. Average ${int(avg)} visits a month; busiest was ${monthLabel(peak.month)} with ${int(peak.visits)}.`);
+      table("d-monthly", ["Month", "Visits", "Emergency", "Inpatient", "Total cost", "Uninsured visits"],
+        mo.map(d => [monthLabel(d.month), int(d.visits), int(d.er), int(d.inpatient), moneyFull(d.cost), pct(d.uninsured_pct)]), [1, 2, 3, 4, 5]);
+
+      const erVals = mo.map(d => +d.er), ipVals = mo.map(d => +d.inpatient);
+      const gap = Math.abs(erVals[erVals.length - 1] - ipVals[ipVals.length - 1]);
+      const nudge = gap < 3 ? 7 : 0;
+      lines("c-acute", mo.map(d => d.month), [
+        { name: "Emergency", color: css("--series-1"), values: erVals, nudge: erVals[erVals.length - 1] >= ipVals[ipVals.length - 1] ? -nudge : nudge },
+        { name: "Inpatient", color: css("--series-2"), values: ipVals, nudge: erVals[erVals.length - 1] >= ipVals[ipVals.length - 1] ? nudge : -nudge },
+      ], { fmt: v => int(v), tick: compact, endLabels: true, height: 220,
+           xShort: l => { const [y, m] = l.split("-"); return m === "01" ? y : `${months[+m - 1]} ’${y.slice(2)}`; },
+           xLong: monthLabel, aria: "Emergency visits and inpatient admissions per month" });
+      const lg = document.getElementById("l-acute"); lg.replaceChildren();
+      [["Emergency visits", css("--series-1")], ["Inpatient admissions", css("--series-2")]].forEach(([n, c]) => {
+        const s = el("span"); const k = el("i"); k.style.background = c; s.append(k, document.createTextNode(n)); lg.appendChild(s);
+      });
+      const erAvg = erVals.reduce((a, b) => a + b, 0) / erVals.length, ipAvg = ipVals.reduce((a, b) => a + b, 0) / ipVals.length;
+      setText("t-acute", `On average ${erAvg.toFixed(1)} emergency visits and ${ipAvg.toFixed(1)} admissions a month.`);
+    }
+
+    /* operations: encounter mix */
+    const mix = D.encounter_mix || [];
+    const totalVisits = mix.reduce((a, d) => a + d.visits, 0);
+    hbars("c-mix", mix.map(d => ({
+      label: typeName(d.type), value: +d.visits,
+      tip: [{ value: int(d.visits), label: "visits" }, { value: pct(100 * d.visits / totalVisits), label: "of all visits" },
+            { value: d.median_hours >= 24 ? `${(d.median_hours / 24).toFixed(1)} days` : `${d.median_hours} hours`, label: "median length" }],
+    })), { fmt: compact, reserve: 44 });
+    const ip = mix.find(d => d.type === "inpatient");
+    setText("t-mix", ip ? `A median inpatient stay lasts ${(ip.median_hours / 24).toFixed(1)} days.` : "All visits by type.");
+    table("d-mix", ["Type", "Visits", "Share", "Median length (hours)", "Total cost"],
+      mix.map(d => [typeName(d.type), int(d.visits), pct(100 * d.visits / totalVisits), d.median_hours, moneyFull(d.cost)]), [1, 2, 3, 4]);
+
+    /* engineering: performance */
+    const pf = (D.performance || []).map(d => ({ ...d, x: d.before_ms / d.after_ms })).sort((a, b) => b.x - a.x);
+    const nice = q => ({
+      a1c_history_all_patients: "A1C lab history", patient_timeline: "Patient visit timeline",
+      readmission_window: "Readmission window", recent_visits_last_90_days: "Visits, last 90 days",
+      patient_diagnoses: "Patient diagnoses", flu_vaccine_gap: "Flu vaccine gap",
+    }[q] || q.replace(/_/g, " "));
+    hbars("c-perf", pf.map(d => ({
+      label: nice(d.query), value: Math.max(d.x, 0.01),
+      tip: [{ value: `${d.x.toFixed(1)}×`, label: "faster" }, { value: `${d.before_ms} ms`, label: "before" }, { value: `${d.after_ms} ms`, label: "after" }],
+    })), { fmt: v => `${v.toFixed(1)}×`, reserve: 48 });
+    if (pf.length) setText("t-perf", `Same queries timed before and after adding indexes (average of 5 runs). Best: ${nice(pf[0].query)}, ${pf[0].x.toFixed(1)}× faster.`);
+    table("d-perf", ["Query", "Purpose", "Before (ms)", "After (ms)", "Speed-up"],
+      pf.map(d => [nice(d.query), d.purpose, d.before_ms, d.after_ms, d.x.toFixed(1) + "×"]), [2, 3, 4]);
+
+    const pe = D.performance_extra || {};
+    const mvX = pe["monthly_kpis__live"] / pe["monthly_kpis__materialized"];
+    const ptX = pe["last_year_bp__unpartitioned"] / pe["last_year_bp__partitioned"];
+    tiles("perf-tiles", [
+      { label: "Materialized view", value: isFinite(mvX) ? `${int(mvX)}× faster` : "–",
+        note: `Dashboard KPIs: ${pe["monthly_kpis__live"]} ms live vs ${pe["monthly_kpis__materialized"]} ms precomputed` },
+      { label: "Partitioning by year", value: isFinite(ptX) ? `${ptX.toFixed(1)}× faster` : "–",
+        note: `Latest-year vitals: ${pe["last_year_bp__unpartitioned"]} ms vs ${pe["last_year_bp__partitioned"]} ms` },
+      { label: "Clinical records modeled", value: compact(S.encounters + S.observations + S.diagnoses + S.medications + S.patients),
+        note: "patients, visits, labs, diagnoses and prescriptions" },
+      { label: "Warehouse layers", value: "4",
+        note: "staging → core → star schema → materialized view" },
+    ]);
+
+    /* engineering: data quality */
+    const dq = D.data_quality || [];
+    const failed = dq.filter(d => d.status !== "PASS");
+    setText("t-dq", `${dq.length} rules checked every table; ${dq.length - failed.length} passed and ${failed.length} flagged records for review.`);
+    const t = el("table"), hr = el("tr");
+    ["Status", "Check", "Table", "Category", "Records flagged", "Rows tested"].forEach((h, i) => hr.appendChild(el("th", i >= 4 ? "num" : null, h)));
+    const th = el("thead"); th.appendChild(hr); t.appendChild(th);
+    const tb = el("tbody");
+    for (const d of dq) {
+      const tr = el("tr");
+      const st = d.status === "PASS" ? ["pass", "✓", "Pass"] : d.status === "WARNING" ? ["warn", "!", "Warning"] : ["err", "×", "Error"];
+      const td = el("td"); const s = el("span", "status " + st[0]); s.append(el("span", "ic", st[1]), document.createTextNode(st[2])); td.appendChild(s);
+      tr.appendChild(td);
+      tr.appendChild(el("td", null, titleCase(d.check.replace(/_/g, " "))));
+      tr.appendChild(el("td", null, d.tbl));
+      tr.appendChild(el("td", null, d.category));
+      tr.appendChild(el("td", "num", int(d.issues)));
+      tr.appendChild(el("td", "num", int(d.rows_tested)));
+      tb.appendChild(tr);
+    }
+    t.appendChild(tb);
+    document.getElementById("c-dq").replaceChildren(t);
+
+    setText("footer-text",
+      `Built with PostgreSQL (staging → core → star schema), PL/pgSQL and vanilla JavaScript. All patient data is synthetic, generated with Synthea; no real patient information is used. Data exported ${D.generated_at}.`);
+  }
+
+  /* ---------- theme toggle ---------- */
+  const toggle = document.getElementById("theme-toggle");
+  const isDark = () => document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  const labelToggle = () => { toggle.textContent = isDark() ? "Light mode" : "Dark mode"; };
+  try { const saved = localStorage.getItem("hc-theme"); if (saved) document.documentElement.dataset.theme = saved; } catch (e) {}
+  toggle.addEventListener("click", () => {
+    const next = isDark() ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("hc-theme", next); } catch (e) {}
+    labelToggle(); render();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { labelToggle(); render(); });
+  labelToggle();
+
+  /* ---------- section nav highlight ---------- */
+  const links = [...document.querySelectorAll("nav.sections a")];
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (en.isIntersecting) links.forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + en.target.id));
+    });
+  }, { rootMargin: "-20% 0px -70% 0px" });
+  document.querySelectorAll("section").forEach(s => obs.observe(s));
+
+  /* ---------- render + re-render on resize ---------- */
+  render();
+  let rt;
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(render, 120); }).observe(document.querySelector(".wrap"));
+})();
+</script>
+</body>
+</html>
